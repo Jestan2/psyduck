@@ -1527,8 +1527,6 @@ export default function PsyduckCanvas() {
         octx.restore();
       }
 
-      /* ---------------- END NEW ---------------- */
-
       rafHighlightRef.current = requestAnimationFrame(tick);
     }
 
