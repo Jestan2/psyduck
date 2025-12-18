@@ -1321,6 +1321,14 @@ export default function PsyduckCanvas() {
       octx.setTransform(dpr, 0, 0, dpr, 0, 0);
       octx.clearRect(0, 0, cssW, cssH);
 
+      // REMOVE magnifier on mobile / touch:
+      const isSmall = cssW < 640; // tailwind "sm"
+      const isCoarse =
+        typeof window !== "undefined" &&
+        window.matchMedia &&
+        window.matchMedia("(pointer: coarse)").matches;
+      const showMagnifier = !(isSmall || isCoarse);
+
       const it = hits[Math.min(hitIndex, hits.length - 1)];
       const sx = cssW / Math.max(1, plan.width);
       const sy = cssH / Math.max(1, plan.height);
@@ -1377,7 +1385,7 @@ export default function PsyduckCanvas() {
       octx.stroke();
       octx.restore();
 
-            /* ---------------- NEW: make the name readable + magnifier ---------------- */
+      /* ---------------- NEW: make the name readable + magnifier ---------------- */
 
       const fullLabel = String(it.fullText || it.text || "");
       const s = (sx + sy) * 0.5; // plan→CSS scale (should be ~uniform)
@@ -1405,10 +1413,9 @@ export default function PsyduckCanvas() {
       octx.fillText(text, x, y);
       octx.restore();
 
-      // B) Magnifier card (zoomed crop) — samples from the *already rendered* canvas
-      //    so we don’t re-render the mosaic at all.
+      // B) Magnifier card (zoomed crop) — DISABLED on mobile/touch
       const srcCanvas = canvasRef.current; // visible canvas (includes energy if active)
-      if (srcCanvas) {
+      if (srcCanvas && showMagnifier) {
         const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
         const magW = Math.min(360, Math.max(240, cssW * 0.34));
