@@ -852,13 +852,18 @@ export default function PsyduckCanvas() {
     // Only run when we have a full plan and all feature masks
     if (!plan || plan.isPreview) return;
 
-    const headbandActive =
-      plan?.unlockHeadbandTails !== undefined ? !!plan.unlockHeadbandTails : total >= 1500;
+    // --- unlock tuning ---
+    const HEADBAND_UNLOCK = 1500;   // bandana appears here
+    const DETAILS_FADE_MAX = 1000;  // eyes/pupils/nostrils reach full opacity here
 
+    // IMPORTANT: visuals should depend on total, not plan flags (avoids stale cached plans)
+    const headbandActive = total >= HEADBAND_UNLOCK;
+
+    // Always load headband mask so we can "neutralize" headband-colored tiles if a cached plan had it enabled
     const need = [
       "silhouette",
       "hair",
-      ...(headbandActive ? ["headband"] : []),
+      "headband",
       "beak",
       "feet",
       "eyes",
@@ -878,7 +883,7 @@ export default function PsyduckCanvas() {
     // Build 1× alpha masks once
     const silMask = bitmapToAlphaMaskCanvas(maskBitmaps.silhouette, w, h, 1);
     const hairMask = bitmapToAlphaMaskCanvas(maskBitmaps.hair, w, h, 1);
-    const headbandMask = headbandActive ? bitmapToAlphaMaskCanvas(maskBitmaps.headband, w, h, 1) : null;
+    const headbandMask = maskBitmaps.headband ? bitmapToAlphaMaskCanvas(maskBitmaps.headband, w, h, 1) : null;
     const beakMask = bitmapToAlphaMaskCanvas(maskBitmaps.beak, w, h, 1);
     const feetMask = bitmapToAlphaMaskCanvas(maskBitmaps.feet, w, h, 1);
     const eyesMaskRaw = bitmapToAlphaMaskCanvas(maskBitmaps.eyes, w, h, 1);
@@ -943,7 +948,7 @@ export default function PsyduckCanvas() {
       };
     }
     const inHair = insideFactory(hairMask);
-    const inHeadband = headbandActive && headbandMask ? insideFactory(headbandMask) : null;
+    const inHeadbandAll = headbandMask ? insideFactory(headbandMask) : null;
     const inBeak = insideFactory(beakMask);
     const inFeet = insideFactory(feetMask);
 
@@ -953,15 +958,22 @@ export default function PsyduckCanvas() {
       if (it.kind !== "text") continue;
       const px = Math.max(7, Number(it.size) || 12);
       const text = it.text;
+      const isHB = !!(inHeadbandAll && inHeadbandAll(it.x, it.y));
+
       let bucket = "body";
       if (inHair(it.x, it.y)) bucket = "hair";
-      else if (headbandActive && inHeadband && inHeadband(it.x, it.y)) bucket = "headband";
+      else if (headbandActive && isHB) bucket = "headband";
       else if (inBeak(it.x, it.y)) bucket = "beak";
       else if (inFeet(it.x, it.y)) bucket = "feet";
 
       const [, bctx] = L[bucket];
       bctx.font = `${px}px ${fontFamily}`;
-      bctx.fillStyle = it.color || "#000";
+
+      // If bandana is LOCKED, force any headband-region text to body yellow so it can't look like a bandana
+      let color = it.color || "#000";
+      if (isHB && !headbandActive) color = "#f6c648"; // matches backend FEATURE_COLORS.body
+      bctx.fillStyle = color;
+
       bctx.fillText(text, it.x, it.y);
     }
 
@@ -1054,12 +1066,15 @@ export default function PsyduckCanvas() {
       fctx.restore();
     }
 
-    // EYES TOPCOAT (AFTER outline): covers any cyan shadow bleeding into the whites
-    drawMaskFill1x(fctx, eyesMaskTop, [255, 255, 255], 1);
-    drawMaskFill1x(fctx, eyesMaskRaw, [255, 255, 255], 1);
+    // pupils + nostrils + eyes fade together (0 → 1 by DETAILS_FADE_MAX)
+    const detailsAlpha = clamp01(total / DETAILS_FADE_MAX);
+    const eyesAlpha = detailsAlpha;
+
+    // EYES TOPCOAT (AFTER outline): fade from 0% → 100%
+    drawMaskFill1x(fctx, eyesMaskTop, [255, 255, 255], eyesAlpha);
+    drawMaskFill1x(fctx, eyesMaskRaw, [255, 255, 255], eyesAlpha);
 
     // pupils + nostrils (dark) — keep on top of the eye whites
-    const detailsAlpha = Math.max(0, Math.min(1, total / 1000));
     drawMaskFill1x(fctx, pupilsMask, [17, 24, 39], detailsAlpha);
     drawMaskFill1x(fctx, nostrilsMask, [17, 24, 39], detailsAlpha);
 
